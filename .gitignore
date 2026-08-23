@@ -1,0 +1,10 @@
+# Secrets
+.env
+
+# Data (sessions, database)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
