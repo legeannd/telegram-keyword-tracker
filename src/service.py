@@ -127,10 +127,11 @@ class TrackerService:
         is_edit: bool,
     ) -> str:
         keywords_str = ", ".join(f"**{kw}**" for kw in keywords)
-        edited_marker = " [Edited]" if is_edit else ""
 
         lines: list[str] = []
-        lines.append(f"🔔 Keyword matched: {keywords_str}{edited_marker}")
+        if is_edit:
+            lines.append("✏️ **Message edited**")
+        lines.append(f"🔔 Keyword matched: {keywords_str}")
         lines.append("")
 
         if chat_title:

@@ -1,7 +1,9 @@
 """MTProto listener for incoming messages across all chats."""
 
 import asyncio
+import hashlib
 import logging
+import time
 
 from telethon import TelegramClient, events
 from telethon.tl.types import User as TlUser, Channel, Chat
@@ -10,6 +12,12 @@ from .config import Config
 from .service import TrackerService
 
 logger = logging.getLogger(__name__)
+
+# In-memory dedup: (chat_id, msg_id) -> (text_hash, timestamp)
+# Prevents duplicate notifications when Telegram fires both
+# NewMessage and MessageEdited for the same channel post.
+_DEDUP_WINDOW = 60  # seconds
+_recent_notifications: dict[tuple[int, int], tuple[str, float]] = {}
 
 
 def _get_chat_title(chat) -> str | None:
@@ -79,6 +87,27 @@ async def setup_listener(
         text = message.text or ""
         if not text:
             return
+
+        # Dedup: skip if we already notified for this exact message text
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        msg_key = (event.chat_id, message.id)
+        now = time.monotonic()
+
+        # Prune old entries
+        stale = [k for k, (_, ts) in _recent_notifications.items() if now - ts > _DEDUP_WINDOW]
+        for k in stale:
+            del _recent_notifications[k]
+
+        prev = _recent_notifications.get(msg_key)
+        if prev is not None:
+            prev_hash, _ = prev
+            if prev_hash == text_hash:
+                # Same message, same text — duplicate event, skip
+                return
+            # Different text — real edit, let it through
+            is_edit = True
+
+        _recent_notifications[msg_key] = (text_hash, now)
 
         # Get chat info
         chat = await event.get_chat()
