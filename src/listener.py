@@ -86,6 +86,10 @@ async def setup_listener(
         chat_username = _get_chat_username(chat)
         chat_id = event.chat_id
 
+        # Skip blacklisted chats
+        if await service.is_blacklisted(chat_title, chat_username):
+            return
+
         # Get sender info
         sender = await event.get_sender()
         sender_name = _get_sender_name(sender)

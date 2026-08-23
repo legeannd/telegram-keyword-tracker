@@ -30,6 +30,34 @@ class TrackerService:
     async def list_keywords(self) -> list[str]:
         return await self._db.list_keywords()
 
+    async def add_blacklist(self, name: str) -> str:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Chat name cannot be empty")
+        existing = await self._db.list_blacklist()
+        for entry in existing:
+            if entry.lower() == normalized.lower():
+                raise ValueError(f"'{normalized}' is already blacklisted")
+        await self._db.add_blacklist(normalized)
+        return normalized
+
+    async def remove_blacklist(self, name: str) -> bool:
+        return await self._db.remove_blacklist(name.strip())
+
+    async def is_blacklisted(self, chat_title: str | None, chat_username: str | None) -> bool:
+        """Check if chat title or username matches any blacklisted name."""
+        blacklist = await self._db.list_blacklist()
+        for entry in blacklist:
+            entry_lower = entry.lower()
+            if chat_title and chat_title.lower() == entry_lower:
+                return True
+            if chat_username and chat_username.lower() == entry_lower:
+                return True
+        return False
+
+    async def list_blacklist(self) -> list[str]:
+        return await self._db.list_blacklist()
+
     def scan_message(
         self,
         text: str,

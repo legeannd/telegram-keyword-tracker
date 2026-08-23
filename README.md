@@ -101,6 +101,9 @@ Message your bot in Telegram:
 | `/add <phrase>` | Track a keyword or exact phrase |
 | `/remove <phrase>` | Stop tracking a keyword |
 | `/list` | Show all active keywords |
+| `/blacklist <name>` | Ignore a chat by title or username |
+| `/unblacklist <name>` | Stop ignoring a chat |
+| `/blacklisted` | Show all blacklisted chats |
 | `/status` | Check if the listener is connected |
 | `/help` | Command reference |
 
@@ -110,6 +113,8 @@ Message your bot in Telegram:
 /add PS5
 /add iPhone 15 Pro
 /add good deal
+/blacklist Spam Group
+/blacklist dealbot
 ```
 
 Keywords are matched as whole words/phrases, case-insensitive. "PS5" matches "New PS5 available!" but not "PS50" or "GPS5".
@@ -118,6 +123,7 @@ Keywords are matched as whole words/phrases, case-insensitive. "PS5" matches "Ne
 
 - **Whole-word/phrase matching** — no false positives from partial matches
 - **Scans everything** — groups, channels, private chats, bot messages, media captions
+- **Chat blacklist** — ignore noisy chats by title or username
 - **Edited message detection** — catches keywords added in edits, marked with [Edited]
 - **Combined notifications** — multiple keywords in one message = one notification
 - **Message links** — direct links for public and private groups/channels

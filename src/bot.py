@@ -102,16 +102,64 @@ async def setup_bot(
         await event.respond(status)
 
 
+    @bot_client.on(events.NewMessage(pattern=r"^/blacklist(\s|$)"))
+    async def handle_blacklist(event: events.NewMessage.Event) -> None:
+        if event.sender_id != config.owner_id:
+            return
+        text = event.message.text or ""
+        name = text[len("/blacklist"):].strip()
+        if not name:
+            await event.respond(
+                "**Usage:** `/blacklist <chat name or username>`\n\n"
+                "Example: `/blacklist Gaming Deals` or `/blacklist dealbot`"
+            )
+            return
+        try:
+            added = await service.add_blacklist(name)
+            await event.respond(f"✅ Blacklisted: **{added}**")
+        except ValueError as e:
+            await event.respond(f"⚠️ {e}")
+
+    @bot_client.on(events.NewMessage(pattern=r"^/unblacklist(\s|$)"))
+    async def handle_unblacklist(event: events.NewMessage.Event) -> None:
+        if event.sender_id != config.owner_id:
+            return
+        text = event.message.text or ""
+        name = text[len("/unblacklist"):].strip()
+        if not name:
+            await event.respond("**Usage:** `/unblacklist <chat name or username>`")
+            return
+        removed = await service.remove_blacklist(name)
+        if removed:
+            await event.respond(f"✅ Removed from blacklist: **{name}**")
+        else:
+            await event.respond(f"⚠️ Not found in blacklist: **{name}**")
+
+    @bot_client.on(events.NewMessage(pattern=r"^/blacklisted$"))
+    async def handle_blacklisted(event: events.NewMessage.Event) -> None:
+        if event.sender_id != config.owner_id:
+            return
+        entries = await service.list_blacklist()
+        if not entries:
+            await event.respond("No chats blacklisted.")
+            return
+        lines = ["**Blacklisted chats:**\n"]
+        for i, name in enumerate(entries, 1):
+            lines.append(f"{i}. `{name}`")
+        await event.respond("\n".join(lines))
+
     @bot_client.on(events.NewMessage(pattern=r"^/help$"))
     async def handle_help(event: events.NewMessage.Event) -> None:
         if event.sender_id != config.owner_id:
             return
         await event.respond(
             "**Command Reference:**\n\n"
-            "`/add <phrase>` — Add a keyword to track. "
-            "Matches are case-insensitive, whole-word.\n\n"
-            "`/remove <phrase>` — Remove a tracked keyword.\n\n"
-            "`/list` — List all active tracked keywords.\n\n"
+            "`/add <phrase>` — Track a keyword or phrase.\n\n"
+            "`/remove <phrase>` — Stop tracking a keyword.\n\n"
+            "`/list` — List all tracked keywords.\n\n"
+            "`/blacklist <name>` — Ignore a chat by title or username.\n\n"
+            "`/unblacklist <name>` — Stop ignoring a chat.\n\n"
+            "`/blacklisted` — Show all blacklisted chats.\n\n"
             "`/status` — Check if the listener is connected.\n\n"
             "`/help` — Show this message.\n\n"
             "**How it works:**\n"
