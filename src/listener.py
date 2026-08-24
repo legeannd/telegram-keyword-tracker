@@ -1,7 +1,7 @@
 """MTProto listener for incoming messages across all chats."""
 
 import asyncio
-import hashlib
+import io
 import logging
 import time
 
@@ -13,11 +13,6 @@ from .service import TrackerService
 
 logger = logging.getLogger(__name__)
 
-# In-memory dedup: (chat_id, msg_id) -> (text_hash, timestamp)
-# Prevents duplicate notifications when Telegram fires both
-# NewMessage and MessageEdited for the same channel post.
-_DEDUP_WINDOW = 60  # seconds
-_recent_notifications: dict[tuple[int, int], tuple[str, float]] = {}
 
 
 def _get_chat_title(chat) -> str | None:
@@ -79,35 +74,14 @@ async def setup_listener(
         if message.out:
             return
 
-        # Skip messages from our bot (prevents recursive scanning)
-        if message.sender_id == bot_id:
+        # Skip messages from our bot or its DM chat (prevents recursive scanning)
+        if message.sender_id == bot_id or event.chat_id == bot_id:
             return
 
         # Get text (message text or caption)
         text = message.text or ""
         if not text:
             return
-
-        # Dedup: skip if we already notified for this exact message text
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        msg_key = (event.chat_id, message.id)
-        now = time.monotonic()
-
-        # Prune old entries
-        stale = [k for k, (_, ts) in _recent_notifications.items() if now - ts > _DEDUP_WINDOW]
-        for k in stale:
-            del _recent_notifications[k]
-
-        prev = _recent_notifications.get(msg_key)
-        if prev is not None:
-            prev_hash, _ = prev
-            if prev_hash == text_hash:
-                # Same message, same text — duplicate event, skip
-                return
-            # Different text — real edit, let it through
-            is_edit = True
-
-        _recent_notifications[msg_key] = (text_hash, now)
 
         # Get chat info
         chat = await event.get_chat()
@@ -139,12 +113,31 @@ async def setup_listener(
         )
 
         if notification:
-            try:
-                await bot_client.send_message(
-                    config.owner_id, notification, link_preview=False
-                )
-            except Exception as e:
-                logger.error("Failed to send notification: %s", e)
+            caption = notification[:1024] if len(notification) > 1024 else notification
+            sent = False
+
+            # If message has a photo, include it as an inline image
+            if message.photo:
+                try:
+                    media_bytes = await client.download_media(message, file=bytes)
+                    if media_bytes:
+                        photo_file = io.BytesIO(media_bytes)
+                        photo_file.name = "photo.jpg"
+                        await bot_client.send_file(
+                            config.owner_id, photo_file, caption=caption,
+                            force_document=False,
+                        )
+                        sent = True
+                except Exception as e:
+                    logger.error("Failed to send photo notification: %s", e)
+
+            if not sent:
+                try:
+                    await bot_client.send_message(
+                        config.owner_id, notification, link_preview=False
+                    )
+                except Exception as e:
+                    logger.error("Failed to send notification: %s", e)
 
     @client.on(events.NewMessage())
     async def handle_new_message(event: events.NewMessage.Event) -> None:
