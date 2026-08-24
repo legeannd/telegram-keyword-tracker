@@ -62,6 +62,10 @@ async def setup_listener(
     # Extract bot's user ID from token (number before the colon)
     bot_id = int(config.bot_token.split(":")[0])
 
+    # Dedup: track recently notified (chat_id, msg_id) to skip duplicate events
+    _notified: dict[tuple[int, int], float] = {}
+    _DEDUP_WINDOW = 60  # seconds
+
     async def _process_message(event, is_edit: bool) -> None:
         """Common processing for new messages and edits."""
         message = event.message
@@ -76,6 +80,12 @@ async def setup_listener(
 
         # Skip messages from our bot or its DM chat (prevents recursive scanning)
         if message.sender_id == bot_id or event.chat_id == bot_id:
+            return
+
+        # Dedup: skip if we already notified for this exact message
+        msg_key = (event.chat_id, message.id)
+        now = time.monotonic()
+        if not is_edit and msg_key in _notified:
             return
 
         # Get text (message text or caption)
@@ -138,6 +148,12 @@ async def setup_listener(
                     )
                 except Exception as e:
                     logger.error("Failed to send notification: %s", e)
+
+            # Record for dedup and prune stale entries
+            _notified[msg_key] = now
+            stale = [k for k, t in _notified.items() if now - t > _DEDUP_WINDOW]
+            for k in stale:
+                del _notified[k]
 
     @client.on(events.NewMessage())
     async def handle_new_message(event: events.NewMessage.Event) -> None:
